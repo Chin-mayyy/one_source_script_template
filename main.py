@@ -1,9 +1,9 @@
 import os
-import json
 import requests
 from docx import Document
 from pathlib import Path
 import time
+import re
 
 class DocxUploader:
     def __init__(self, api_endpoint, auth_token, folder_path):
@@ -23,34 +23,60 @@ class DocxUploader:
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():  # Skip empty paragraphs
                     content.append(paragraph.text.strip())
-
             return '\n'.join(content)
 
         except Exception as e:
             print(f"Error reading {file_path}: {str(e)}")
             return None
 
-    def create_request_body(self, content, filename):
+    def extract_bracket_content(self, text):
+        """
+        Extract all content inside {{}} and <<>> brackets from a string.
+
+        Args:
+            text (str): Input string containing bracketed content
+
+        Returns:
+            list: Array of strings containing the extracted content (without brackets)
+        """
+        text = str(text)
+        # Extract content inside {{}}
+        curly_braces = re.findall(r'\{\{(.*?)\}\}', text, re.DOTALL)
+
+        # Extract content inside <<>>
+        angle_brackets = re.findall(r'<<(.*?)>>', text, re.DOTALL)
+
+        # Combine both lists and remove duplicates while preserving order
+        all_content = []
+        seen = set()
+
+        for item in curly_braces + angle_brackets:
+            # Strip whitespace and newlines
+            cleaned_item = item.strip()
+            if cleaned_item and cleaned_item not in seen:
+                all_content.append(cleaned_item)
+                seen.add(cleaned_item)
+
+        return all_content
+
+    def create_request_body(self, filename, content):
         """Create the request body structure"""
         # Extract name from filename (remove .docx extension)
+        filename = Path(filename)
         name = filename.stem
+        print(f"Processing file: {name}")
 
         # You can customize these fields based on your requirements
+        markers = self.extract_bracket_content(content)
         request_body = {
             "formId": "68c99de867cffddcbec94f02",
             "name": name,
-            "subject": f"Document: {name}",
-            "subjectPlaceholders": [
-                "name",
-                "company"
-            ],
+            "subject": f"{name}",
+            "subjectPlaceholders": [],#will be empty for document templates
             "content": content,
-            "placeholders": [
-                "name",
-                "company"
-            ],
-            "category": "Document",  # You can customize this
-            "type": "email"
+            "placeholders": markers,
+            "category": "",  # You can customize this
+            "type": "document"
         }
 
         return request_body
@@ -112,7 +138,7 @@ class DocxUploader:
                 continue
 
             # Create request body
-            request_body = self.create_request_body(content, file_path)
+            request_body = self.create_request_body(file_path, content)  # Pass the full file_path, not just the name
 
             # Upload document
             if self.upload_document(request_body, file_path.name):
@@ -125,16 +151,16 @@ class DocxUploader:
 
         # Summary
         print(f"\n{'='*50}")
-        print(f"Upload Summary:")
         print(f"✅ Successful uploads: {successful_uploads}")
         print(f"❌ Failed uploads: {failed_uploads}")
         print(f"📁 Total files processed: {successful_uploads + failed_uploads}")
 
+
 def main():
     # Configuration - UPDATE THESE VALUES
     API_ENDPOINT = "https://onesource.viithiisyserp.com/api/templates"  # Replace with your actual endpoint
-    AUTH_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdXRoVXNlcklkIjoiNGY3MGEzODUtMGE5ZS00MTMzLTg3OTUtM2Q3NTFlMTA4Yzg4Iiwicm9sZUlkIjoiNGY2NmRiM2QtMjQyZC00NjEzLWE1M2UtMzk2MjY1YzJjYTRlIiwicm9sZU5hbWUiOiJBZG1pbmlzdHJhdG9yIiwiZW1haWwiOiJzaGFudHkuc2FpbmlAdmlpdGhpaXN5cy5jb20iLCJuYW1lIjoiU2hhbnR5IiwiaWF0IjoxNzU4MjgyMjc3LCJleHAiOjE3NTg1NDE0Nzd9.N-DX8edw3vR0M0QH9dFORjg6IYjcoVlSCk26AdqXm3o"  # Replace with your actual token
-    FOLDER_PATH = "moved_templates/"  # Replace with your folder path
+    AUTH_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdXRoVXNlcklkIjoiNGY3MGEzODUtMGE5ZS00MTMzLTg3OTUtM2Q3NTFlMTA4Yzg4Iiwicm9sZUlkIjoiNGY2NmRiM2QtMjQyZC00NjEzLWE1M2UtMzk2MjY1YzJjYTRlIiwicm9sZU5hbWUiOiJBZG1pbmlzdHJhdG9yIiwiZW1haWwiOiJzaGFudHkuc2FpbmlAdmlpdGhpaXN5cy5jb20iLCJuYW1lIjoiU2hhbnR5IiwiaWF0IjoxNzU4ODIxNTA4LCJleHAiOjE3NTkwODA3MDh9.mbDzgXGfbheJCeZYnP-hSOyU83dRv5xSu6BkgdPKfL8"
+    FOLDER_PATH = "moved_templates2/"  # Replace with your folder path
 
     # Validate inputs
     if AUTH_TOKEN == "your_auth_token_here":
